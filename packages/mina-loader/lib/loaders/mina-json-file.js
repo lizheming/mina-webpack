@@ -1,15 +1,16 @@
 const path = require('path')
 const JSON5 = require('json5')
+const resolve = require('resolve')
 const merge = require('lodash.merge')
 const compose = require('compose-function')
 const replaceExt = require('replace-ext')
 const loaderUtils = require('loader-utils')
-const resolveFrom = require('resolve-from')
 const ensurePosix = require('ensure-posix-path')
 const pMap = require('p-map')
-const pAll = require('p-all')
 
 const helpers = require('../helpers')
+
+const RESOLVE_EXTENSIONS = ['.js', '.wxml', 'json', 'wxss']
 
 function stripExt(path) {
   return replaceExt(path, '')
@@ -24,26 +25,28 @@ function mapObject(object, iteratee) {
 }
 
 function resolveFile(dirname, target, context) {
-  let resolve = target =>
+  let _resolve = target =>
     compose(
       ensurePosix,
-      helpers.toSafeOutputPath
+      helpers.toSafeOutputPath,
+      stripExt
     )(resolveFromModule(context, target))
 
   if (target.startsWith('/')) {
-    return resolve(target.slice(1))
+    return _resolve(target.slice(1))
   }
 
   // relative url
-  return resolve(path.relative(context, path.resolve(dirname, target)))
+  return _resolve(path.relative(context, path.resolve(dirname, target)))
 }
 
 function resolveFromModule(context, filename) {
-  return stripExt(
-    path.relative(
-      context,
-      resolveFrom(context, loaderUtils.urlToRequest(filename))
-    )
+  return path.relative(
+    context,
+    resolve.sync(loaderUtils.urlToRequest(filename), {
+      basedir: context,
+      extensions: RESOLVE_EXTENSIONS,
+    })
   )
 }
 
