@@ -2,12 +2,14 @@ const path = require('path')
 const fs = require('fs-extra')
 const JSON5 = require('json5')
 const replaceExt = require('replace-ext')
-const resolveFrom = require('resolve-from')
+const resolve = require('resolve')
 const ensurePosix = require('ensure-posix-path')
 const { urlToRequest } = require('loader-utils')
 const { parseComponent } = require('vue-template-compiler')
 const SingleEntryPlugin = require('webpack/lib/SingleEntryPlugin')
 const MultiEntryPlugin = require('webpack/lib/MultiEntryPlugin')
+
+const RESOLVE_EXTENSIONS = ['.js', '.wxml', 'json', 'wxss']
 
 function isModuleUrl(url) {
   return !!url.match(/^~/)
@@ -21,6 +23,9 @@ function addEntry(context, item, name) {
 }
 
 function readConfig(fullpath) {
+  if (!fullpath) {
+    return {}
+  }
   let buffer = fs.readFileSync(fullpath)
   let blocks = parseComponent(buffer.toString()).customBlocks
   let matched = blocks.find(block => block.type === 'config')
@@ -60,12 +65,32 @@ function getItems(rootContext, url) {
         path.resolve(context, isModule ? url : `./${url}`)
       )
     )
+
+    let fullpath
+    try {
+      fullpath = resolve.sync(request, { basedir: rootContext })
+    } catch (error) {
+      let baseurl = replaceExt(
+        resolve.sync(request, {
+          basedir: rootContext,
+          extensions: RESOLVE_EXTENSIONS,
+        }),
+        ''
+      )
+      console.log(baseurl)
+      request = `${require.resolve(
+        './virtual-mina-loader.js'
+      )}?baseurl=${baseurl}!`
+    }
+
     let current = {
       url,
       request,
-      isModule: isModule,
-      fullpath: resolveFrom(rootContext, request),
+      isModule,
+      fullpath,
     }
+
+    console.log(current)
 
     if (memory.some(item => item.fullpath === current.fullpath)) {
       return

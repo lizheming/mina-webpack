@@ -115,3 +115,25 @@ test('pages / usingComponents could be defined with non-extname', async t => {
 
   t.pass()
 })
+
+test('pages / usingComponents could be defined with non-extname with MinaEntryPlugin', async t => {
+  const { compile, mfs } = compiler({
+    context: resolveRelative('fixtures/entry'),
+    entry: './app-non-extname.mina',
+    output: {
+      filename: '[name]',
+    },
+    plugins: [new MinaEntryPlugin()],
+  })
+  const stats = await compile()
+
+  t.deepEqual(stats.compilation.errors, [], stats.compilation.errors[0])
+
+  t.true(mfs.existsSync('/app-non-extname.js'))
+  t.true(mfs.existsSync('/app-non-extname.json'))
+  t.deepEqual(JSON.parse(mfs.readFileSync('/app-non-extname.json', 'utf8')), {
+    pages: ['page-c', 'page-d'],
+  })
+
+  t.pass()
+})
