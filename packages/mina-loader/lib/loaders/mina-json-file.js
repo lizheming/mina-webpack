@@ -32,6 +32,8 @@ function resolveFile(dirname, target, context) {
       stripExt
     )(resolveFromModule(context, target))
 
+  target = target.split('!').slice(-1)[0]
+
   if (target.startsWith('/')) {
     return _resolve(target.slice(1))
   }
