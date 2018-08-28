@@ -135,5 +135,9 @@ test('pages / usingComponents could be defined with non-extname with MinaEntryPl
     pages: ['page-c', 'page-d'],
   })
 
+  // console.log(stats)
+  console.log(mfs.data)
+  // console.log(mfs.data['page-d.js'].toString())
+
   t.pass()
 })

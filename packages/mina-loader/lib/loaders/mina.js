@@ -112,6 +112,7 @@ module.exports = function(source) {
                 helpers.toSafeOutputPath,
                 path.dirname
               )(path.relative(this.rootContext, url))
+              console.log('url', url)
               let request = `!!${resolve(
                 'file-loader'
               )}?name=${dirname}/[name].${EXTNAMES[type]}!${getLoaderOf(

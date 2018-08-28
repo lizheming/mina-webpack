@@ -8,11 +8,14 @@ const { urlToRequest } = require('loader-utils')
 const { parseComponent } = require('vue-template-compiler')
 const SingleEntryPlugin = require('webpack/lib/SingleEntryPlugin')
 const MultiEntryPlugin = require('webpack/lib/MultiEntryPlugin')
+const compose = require('compose-function')
+
+const { toSafeOutputPath } = require('./helpers')
 
 const RESOLVE_EXTENSIONS = ['.js', '.wxml', 'json', 'wxss']
 
-function isModuleUrl(url) {
-  return !!url.match(/^~/)
+function isAbsoluteUrl(url) {
+  return !!url.startsWith('/')
 }
 
 function addEntry(context, item, name) {
@@ -23,9 +26,6 @@ function addEntry(context, item, name) {
 }
 
 function readConfig(fullpath) {
-  if (!fullpath) {
-    return {}
-  }
   let buffer = fs.readFileSync(fullpath)
   let blocks = parseComponent(buffer.toString()).customBlocks
   let matched = blocks.find(block => block.type === 'config')
@@ -58,56 +58,58 @@ function getItems(rootContext, url) {
   let memory = []
 
   function search(context, url) {
-    let isModule = isModuleUrl(url)
-    let request = urlToRequest(
-      path.relative(
-        rootContext,
-        path.resolve(context, isModule ? url : `./${url}`)
-      )
-    )
+    let request = urlToRequest(isAbsoluteUrl(url) ? url.slice(1) : path.relative(
+      rootContext,
+      path.resolve(context, url)
+    ))
 
-    let fullpath
+    let fullpath, isSeparation
     try {
-      fullpath = resolve.sync(request, { basedir: rootContext })
+      fullpath = resolve.sync(request, { basedir: rootContext, extensions: [] })
+      isSeparation = false
     } catch (error) {
-      let baseurl = replaceExt(
-        resolve.sync(request, {
-          basedir: rootContext,
-          extensions: RESOLVE_EXTENSIONS,
-        }),
-        ''
-      )
-      console.log(baseurl)
-      request = `${require.resolve(
+      fullpath = resolve.sync(request, {
+        basedir: rootContext,
+        extensions: RESOLVE_EXTENSIONS,
+      })
+      // console.log(fullpath)
+      request = `${require.resolve('@tinajs/mina-loader')}!${require.resolve(
         './virtual-mina-loader.js'
-      )}?baseurl=${baseurl}!`
+      )}?base=${replaceExt(fullpath, '')}!${fullpath}`
+      isSeparation = true
     }
+
+    let name = compose(
+      ensurePosix,
+      (path) => replaceExt(path, '.js'),
+      urlToRequest,
+      toSafeOutputPath
+    )(path.relative(rootContext, fullpath))
 
     let current = {
-      url,
+      name,
+      // url,
       request,
-      isModule,
-      fullpath,
+      // isModule,
+      // fullpath,
+      // isSeparation,
     }
 
-    console.log(current)
-
-    if (memory.some(item => item.fullpath === current.fullpath)) {
+    if (memory.some(item => item.request === current.request)) {
       return
     }
     memory.push(current)
 
-    let urls = getUrlsFromConfig(readConfig(current.fullpath))
+    if (isSeparation) {
+      return
+    }
+    let urls = getUrlsFromConfig(readConfig(fullpath))
     if (urls.length > 0) {
       urls.forEach(url => {
         if (url.startsWith('plugin://')) {
           return
         }
-        if (url.startsWith('/')) {
-          return search(rootContext, url.slice(1))
-        }
-        // relative url
-        return search(path.dirname(current.fullpath), url)
+        return search(path.dirname(fullpath), url)
       })
     }
   }
@@ -140,21 +142,15 @@ module.exports = class MinaEntryWebpackPlugin {
       }
 
       getItems(context, entry).forEach(item => {
-        if (this._items.some(({ fullpath }) => fullpath === item.fullpath)) {
+        if (this._items.some(({ request }) => request === item.request)) {
           return
         }
         this._items.push(item)
-        let url = path
-          .relative(context, item.fullpath)
-          // replace '..' to '_'
-          .replace(/\.\./g, '_')
-          // replace 'node_modules' to '_node_modules_'
-          .replace(/node_modules([\/\\])/g, '_node_modules_$1')
-        let name = replaceExt(urlToRequest(url), '.js')
+        console.log(item.request)
         addEntry(
           context,
           this.map(ensurePosix(item.request)),
-          ensurePosix(name)
+          item.name
         ).apply(compiler)
       })
     } catch (error) {
